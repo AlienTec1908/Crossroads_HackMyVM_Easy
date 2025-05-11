@@ -1,6 +1,6 @@
 # Crossroads - HackMyVM (Easy)
 
-![Crossroads.png]
+![Crossroads.png](Crossroads.png)
 
 ## Übersicht
 
